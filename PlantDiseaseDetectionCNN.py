@@ -82,9 +82,10 @@ try:
                 if single_plant_disease_image == ".DS_Store":
                     plant_disease_image_list.remove(single_plant_disease_image)
 
-            for image in plant_disease_image_list[:200]:
+            for image in plant_disease_image_list[:200]:    # 200 images from each folder
                 image_directory = f"{directory_root}/{plant_folder}/{plant_disease_folder}/{image}"
                 if image_directory.endswith(".jpg") == True or image_directory.endswith(".JPG") == True:
+                    # Convert each image to an array using the function.
                     image_list.append(convert_image_to_array(image_directory))
                     label_list.append(plant_disease_folder)
     print("[INFO] Image loading completed")
@@ -94,7 +95,7 @@ except Exception as e:
 #TODO: Get Size of Processed Image:
 image_size = len(image_list)
 
-#TODO: Transform Image Labels uisng Scikit Learn's LabelBinarizer:
+#TODO: Transform Image Labels to binary levels uisng Scikit Learn's LabelBinarizer:
 label_binarizer = LabelBinarizer()
 image_labels = label_binarizer.fit_transform(label_list)
 pickle.dump(label_binarizer,open('label_transform.pkl', 'wb'))
@@ -102,10 +103,15 @@ n_classes = len(label_binarizer.classes_)
 
 #TODO: Print the classes:
 print(label_binarizer.classes_)
+#  pre-process the input data by scaling the data points from [0, 255]
+#  (the minimum and maximum RGB values of the image) to the range [0, 1]
 np_image_list = np.array(image_list, dtype=np.float16) / 225.0
+# training/testing split on the data using 80% of the images for training and 20% for testing
 print("[INFO] Spliting data to train, test")
 x_train, x_test, y_train, y_test = train_test_split(np_image_list, image_labels, test_size=0.2, random_state = 42)
 
+# Image generator object which performs random rotations,
+# shifts, flips, crops, and sheers on our image dataset
 aug = ImageDataGenerator(
     rotation_range=25, width_shift_range=0.1,
     height_shift_range=0.1, shear_range=0.2,
@@ -119,11 +125,16 @@ chanDim = -1
 if K.image_data_format() == "channels_first":
     inputShape = (depth, height, width)
     chanDim = 1
+    # CONV => RELU => POOL
+    # CONV layer has 32 filters with a 3 x 3 kernel and RELU activation (Rectified Linear Unit)
+    # Apply batch normalization, max pooling, and 25% (0.25) dropout
 model.add(Conv2D(32, (3, 3), padding="same",input_shape=inputShape))
 model.add(Activation("relu"))
 model.add(BatchNormalization(axis=chanDim))
 model.add(MaxPooling2D(pool_size=(3, 3)))
 model.add(Dropout(0.25))
+# (CONV => RELU) * 2 => POOL blocks
+# FC (Fully Connected Layer)=> RELU layers
 model.add(Conv2D(64, (3, 3), padding="same"))
 model.add(Activation("relu"))
 model.add(BatchNormalization(axis=chanDim))
@@ -150,12 +161,15 @@ model.add(Activation("softmax"))
 
 model.summary()
 
+# Using  Keras Adam Optimizer for model
 opt = Adam(lr=INIT_LR, decay=INIT_LR / EPOCHS)
 # distribution
 model.compile(loss="binary_crossentropy", optimizer=opt,metrics=["accuracy"])
 # train the network
 print("[INFO] training network...")
 
+# Training network model.fit_generator
+# Epochs value of 25
 history = model.fit_generator(
     aug.flow(x_train, y_train, batch_size=BS),
     validation_data=(x_test, y_test),
@@ -163,25 +177,25 @@ history = model.fit_generator(
     epochs=EPOCHS, verbose=1
     )
 
-#TODO: Plot the train and val curve:
-acc = history.history['acc']
-val_acc = history.history['val_acc']
-loss = history.history['loss']
-val_loss = history.history['val_loss']
-epochs = range(1, len(acc) + 1)
-#Train and validation accuracy
-plt.plot(epochs, acc, 'b', label='Training accurarcy')
-plt.plot(epochs, val_acc, 'r', label='Validation accurarcy')
-plt.title('Training and Validation accurarcy')
-plt.legend()
-
-plt.figure()
-#Train and validation loss
-plt.plot(epochs, loss, 'b', label='Training loss')
-plt.plot(epochs, val_loss, 'r', label='Validation loss')
-plt.title('Training and Validation loss')
-plt.legend()
-plt.show()
+# #TODO: Plot the train and val curve:
+# acc = history.history['acc']
+# val_acc = history.history['val_acc']
+# loss = history.history['loss']
+# val_loss = history.history['val_loss']
+# epochs = range(1, len(acc) + 1)
+# #Train and validation accuracy
+# plt.plot(epochs, acc, 'b', label='Training accurarcy')
+# plt.plot(epochs, val_acc, 'r', label='Validation accurarcy')
+# plt.title('Training and Validation accurarcy')
+# plt.legend()
+#
+# plt.figure()
+# #Train and validation loss
+# plt.plot(epochs, loss, 'b', label='Training loss')
+# plt.plot(epochs, val_loss, 'r', label='Validation loss')
+# plt.title('Training and Validation loss')
+# plt.legend()
+# plt.show()
 
 #TODO: Model Accuracy:
 print("[INFO] Calculating model accuracy")
@@ -192,5 +206,3 @@ print(f"Test Accuracy: {scores[1]*100}")
 # save the model to disk
 print("[INFO] Saving model...")
 pickle.dump(model,open('cnn_model.pkl', 'wb'))
-
-
